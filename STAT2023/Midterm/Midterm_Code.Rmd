@@ -1,0 +1,181 @@
+---
+title: "Midterm Code R Markdown"
+author: "Vincent Bianchi"
+date: "2023-11-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Reading in Data
+
+```{r}
+
+total_data <- read.csv("./UsedCar.csv", header=T, 
+                       stringsAsFactors=T)
+```
+
+## Basic Data Visualization
+
+# Scatter Plot
+# Boxplot
+# Histogram
+
+```{r}
+
+# Scatter plot (between Sales and Price)
+plot(Car_seats_data$Price, Car_seats_data$Sales)
+
+# Boxplot (between Sales and ShelveLoc)
+boxplot(Car_seats_data$Sales~Car_seats_data$ShelveLoc)
+
+# Histogram (of Sales)
+hist(Car_seats_data$Sales, main='Histogram of Sales', xlab='')
+
+```
+
+# Log Transformation
+
+```{r}
+
+# Creating a log transformation of response variable, Price
+# and store it as a new variable called log_price within the
+# dataframe
+
+total_data$Log_price  <- log(total_data$Price+1)
+
+
+```
+
+# Data Partition
+
+```{r}
+total_data <- read.csv("./UsedCar.csv", header=T, stringsAsFactors=T)
+set.seed(7)
+total_obs <- dim(total_data)[1]
+
+# Data partition / Sample splitting
+train_data_indices <- sample(1:total_obs, 0.8*total_obs)
+train_data <- total_data[train_data_indices,]
+test_data <- total_data[-train_data_indices,]
+
+# Record the size of training data and test data
+train_obs <- dim(train_data)[1]
+test_obs <- dim(test_data)[2]
+
+```
+
+# Linear Regression
+
+```{r}
+
+summary(train_data)
+
+lm_full <- lm(Price~Age+Mileage+Fuel_Type+HP+Metallic+Automatic+CC+Doors+Quarterly_Tax+Weight, data=train_data)
+
+```
+
+# GAM 
+
+```{r}
+
+library(gam)
+
+summary(total_data)
+
+# *** Degree-Of-Freedom ***
+
+gam_full <- gam(Balance~s(Income,df=4)+s(Limit,df=4)+s(Rating,df=4)+s(Cards,df=4)+s(Age,df=4)+s(Education,df=4)+Student,
+                data=train_data)
+
+plot(gam_full, col='skyblue')
+
+```
+
+# Neural networks
+
+```{r}
+
+# Let's generate the **training dataset** that are needed for the estimation of NN using the function `model.matrix()` and store it in `x_train_nn`. In addition, use the `scale()` function to standardize the predictors by centering with mean and scaling with sd.
+
+# TRAIN DATA
+
+library(neuralnet)
+
+x_train_nn <- model.matrix(~Income+Limit+Rating+Cards+Age+Education+Student, data=train_data)[,-1]
+
+
+# *** Standardization ***
+
+x_mean <- apply(x_train_nn, 2, mean)
+x_sd <- apply(x_train_nn, 2, sd)
+x_train_nn <- scale(x_train_nn, center=x_mean, scale=x_sd)
+
+# Let's further standardize the dependent variable `Balance` by dividing its maximum value. In addition, combine the standardized `Balance` with the standardized predictors `x_train_nn` generated in Q3(a)
+# y_max <- max(train_data$Balance)
+
+x_train_nn <- cbind.data.frame(train_data$Balance/y_max, x_train_nn)
+colnames(x_train_nn)[1] <- 'st_Balance'
+
+# Let's generate the **test dataset** that are needed for the out-of-sample prediction evaluation of NN using the function `model.matrix` and store it in `x_test_nn`. Use the `scale()` function to standardize the predictors by centering with mean and scaling with sd as in Q3(a)
+
+# TEST DATA
+
+x_test_nn <- model.matrix(~Income+Limit+Rating+Cards+Age+Education+Student, data=test_data)[,-1]
+
+x_test_nn <- scale(x_test_nn, center=x_mean, scale=x_sd)
+
+# combine with dependent variable Balance
+x_test_nn <- cbind.data.frame(test_data$Balance, x_test_nn)
+colnames(x_test_nn)[1] <- 'Balance'
+
+# Let's fit an NN that has two hidden layers with 4 hidden units in the first layer and 2 hidden units in the second layer. Make sure to use random seed **`set.seed(7)`**!
+
+library(neuralnet)
+set.seed(7)
+
+nn_full <- neuralnet(st_Balance~., data=x_train_nn, hidden=c(4,2))
+
+plot(nn_full)
+
+
+```
+
+# Model Deployment (generate prediction on test_data)
+
+```{r}
+
+# Use `lm_full`, `gam_full` and `nn_full` to generate predictions for `Balance` on the test data and store the prediction in `lm_pred`, `gam_pred` and `nn_pred` respectively. Note that for prediction based on `nn_full`, make sure to transform the prediction of **standardized scale** `Balance` back to the **original scale**
+
+# *** Generate Predictions ***
+
+lm_pred <- (predict(lm_full, newdata=test_data))
+gam_pred <- (predict(gam_full, newdata=test_data))
+nn_pred <- (predict(nn_full, newdata=x_test_nn)[,1])*y_max
+
+```
+
+# Model Evaluation (Calculating MAE, MAPE, RMSE)
+
+```{r}
+
+# Use the `R` package `forecast` to evaluate the prediction performance of `lm_full`, `gam_full` and `nn_full`. What are the MAE for `lm_full`, `gam_full` and `nn_full`? (Note that MPE and MAPE may be undefined as some persons have `Balance`=0.)
+
+# Calculate MAE, MAPE, RMSE
+
+library(forecast)
+
+lm_err <- accuracy(lm_pred, test_data$Balance)
+gam_err <- accuracy(gam_pred, test_data$Balance)
+nn_err <- accuracy(nn_pred, test_data$Balance)
+
+lm_err[3]
+gam_err[3]
+nn_err[3]
+
+
+
+```
+
